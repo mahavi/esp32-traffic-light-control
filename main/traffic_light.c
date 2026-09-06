@@ -272,11 +272,11 @@ static void setup_leds(void)
   gpio_set_level(TRAFFIC_LIGHT_RED_LED_GPIO, 0);
 
   gpio_reset_pin(TRAFFIC_LIGHT_YELLOW_LED_GPIO);
-  gpio_set_direction(TRAFFIC_LIGHT_YELLOW_LED_GPIO, GPIO_MODE_OUTPUT);
+  gpio_set_direction(TRAFFIC_LIGHT_YELLOW_LED_GPIO, GPIO_MODE_INPUT_OUTPUT);
   gpio_set_level(TRAFFIC_LIGHT_YELLOW_LED_GPIO, 0);
 
   gpio_reset_pin(TRAFFIC_LIGHT_GREEN_LED_GPIO);
-  gpio_set_direction(TRAFFIC_LIGHT_GREEN_LED_GPIO, GPIO_MODE_OUTPUT);
+  gpio_set_direction(TRAFFIC_LIGHT_GREEN_LED_GPIO, GPIO_MODE_INPUT_OUTPUT);
   gpio_set_level(TRAFFIC_LIGHT_GREEN_LED_GPIO, 0);
 }
 

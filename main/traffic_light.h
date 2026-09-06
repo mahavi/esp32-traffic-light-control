@@ -12,4 +12,4 @@ void traffic_light_init(void);
 void traffic_light_set_mode(traffic_light_mode_t new_mode);
 void traffic_light_process(void);
 
-#endif  // TRAFFIC_LIGHT_H_
+#endif // TRAFFIC_LIGHT_H_
