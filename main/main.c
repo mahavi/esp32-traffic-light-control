@@ -1,23 +1,21 @@
-#include <stdio.h>
-
-#include "driver/gpio.h"
-#include "driver/gptimer.h"
-#include "esp_log.h"
+#include "configuration.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-
-static const char *TAG = "tlc";
-
-static void setup(void)
-{
-}
+#include "traffic_light.h"
 
 static void loop(void)
 {
-  while(1)
+  while (1)
   {
-    vTaskDelay(pdMS_TO_TICKS(10));
+    traffic_light_process();
+    vTaskDelay(pdMS_TO_TICKS(TRAFFIC_LIGHT_PROCESS_INTERVAL_MS));
   }
+}
+
+static void setup(void)
+{
+  traffic_light_init();
+  traffic_light_set_mode(TRAFFIC_LIGHT_MODE_NORMAL);
 }
 
 void app_main(void)
