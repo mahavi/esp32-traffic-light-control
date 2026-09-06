@@ -6,9 +6,9 @@
 #include "configuration.h"
 #include "driver/gpio.h"
 #include "driver/gptimer.h"
-#include "esp_attr.h"
 #include "esp_err.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 
 #define MILLISECONDS_TO_TICKS(milliseconds) \
   ((uint64_t)(milliseconds) * TRAFFIC_LIGHT_TIMER_RESOLUTION_HZ / 1000U)
@@ -25,9 +25,11 @@ typedef enum
 static const char *TAG = "traffic_light";
 static gptimer_handle_t s_state_timer;
 static gptimer_handle_t s_blink_timer;
+static esp_timer_handle_t s_debounce_timer;
 
 static volatile bool s_state_timer_alarm_pending;
 static volatile bool s_blink_timer_alarm_pending;
+static volatile bool s_debounce_timer_pending;
 static traffic_light_state_t s_current_state = TRAFFIC_LIGHT_STATE_GREEN;
 static traffic_light_mode_t s_current_mode = TRAFFIC_LIGHT_MODE_OFF;
 
@@ -65,6 +67,14 @@ static const char *mode_name(traffic_light_mode_t mode)
   return "UNKNOWN";
 }
 
+static void IRAM_ATTR mode_button_isr_handler(void *arg)
+{
+  (void)arg;
+
+  esp_timer_stop(s_debounce_timer);
+  esp_timer_start_once(s_debounce_timer, TRAFFIC_LIGHT_BUTTON_DEBOUNCE_US);
+}
+
 static bool IRAM_ATTR on_state_timer_alarm(
     gptimer_handle_t timer,
     const gptimer_alarm_event_data_t *event_data,
@@ -91,6 +101,18 @@ static bool IRAM_ATTR on_blink_timer_alarm(
   s_blink_timer_alarm_pending = true;
 
   return false;
+}
+
+static void debounce_timer_cb(void *arg)
+{
+  (void)arg;
+
+  if (gpio_get_level(TRAFFIC_LIGHT_MODE_BUTTON_GPIO) != 0)
+  {
+    return;
+  }
+
+  s_debounce_timer_pending = true;
 }
 
 static void start_state_timer(uint64_t duration_ticks)
@@ -231,6 +253,24 @@ static void handle_blink_timer_alarm(void)
   }
 }
 
+static void handle_debounce_timer_alarm(void)
+{
+  switch (s_current_mode)
+  {
+  case TRAFFIC_LIGHT_MODE_NORMAL:
+    traffic_light_set_mode(TRAFFIC_LIGHT_MODE_YELLOW_BLINKING);
+    break;
+
+  case TRAFFIC_LIGHT_MODE_YELLOW_BLINKING:
+    traffic_light_set_mode(TRAFFIC_LIGHT_MODE_OFF);
+    break;
+
+  case TRAFFIC_LIGHT_MODE_OFF:
+    traffic_light_set_mode(TRAFFIC_LIGHT_MODE_NORMAL);
+    break;
+  }
+}
+
 static void setup_state_timer(void)
 {
   gptimer_config_t config = {
@@ -265,6 +305,15 @@ static void setup_blink_timer(void)
   ESP_ERROR_CHECK(gptimer_enable(s_blink_timer));
 }
 
+static void setup_debounce_timer(void)
+{
+  const esp_timer_create_args_t args = {
+      .callback = debounce_timer_cb,
+      .name = "debounce",
+  };
+  ESP_ERROR_CHECK(esp_timer_create(&args, &s_debounce_timer));
+}
+
 static void setup_leds(void)
 {
   gpio_reset_pin(TRAFFIC_LIGHT_RED_LED_GPIO);
@@ -280,11 +329,30 @@ static void setup_leds(void)
   gpio_set_level(TRAFFIC_LIGHT_GREEN_LED_GPIO, 0);
 }
 
+static void setup_mode_button(void)
+{
+  gpio_config_t io = {
+      .pin_bit_mask = 1ULL << TRAFFIC_LIGHT_MODE_BUTTON_GPIO,
+      .mode = GPIO_MODE_INPUT,
+      .pull_up_en = GPIO_PULLUP_ENABLE,
+      .pull_down_en = GPIO_PULLDOWN_DISABLE,
+      .intr_type = GPIO_INTR_NEGEDGE,
+  };
+  ESP_ERROR_CHECK(gpio_config(&io));
+  ESP_ERROR_CHECK(gpio_install_isr_service(ESP_INTR_FLAG_IRAM));
+  ESP_ERROR_CHECK(gpio_isr_handler_add(
+      TRAFFIC_LIGHT_MODE_BUTTON_GPIO,
+      mode_button_isr_handler,
+      NULL));
+}
+
 void traffic_light_init(void)
 {
   setup_state_timer();
   setup_blink_timer();
+  setup_debounce_timer();
   setup_leds();
+  setup_mode_button();
 
   ESP_LOGI(
       TAG,
@@ -342,5 +410,11 @@ void traffic_light_process(void)
   {
     s_blink_timer_alarm_pending = false;
     handle_blink_timer_alarm();
+  }
+
+  if (s_debounce_timer_pending)
+  {
+    s_debounce_timer_pending = false;
+    handle_debounce_timer_alarm();
   }
 }
