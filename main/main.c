@@ -15,7 +15,7 @@ static void loop(void)
 static void setup(void)
 {
   traffic_light_init();
-  traffic_light_set_mode(TRAFFIC_LIGHT_MODE_NORMAL);
+  traffic_light_set_mode(TRAFFIC_LIGHT_MODE_OFF);
 }
 
 void app_main(void)
