@@ -8,6 +8,7 @@
 #include "driver/gptimer.h"
 #include "esp_attr.h"
 #include "esp_err.h"
+#include "esp_log.h"
 
 #define MILLISECONDS_TO_TICKS(milliseconds) \
   ((uint64_t)(milliseconds) * TRAFFIC_LIGHT_TIMER_RESOLUTION_HZ / 1000U)
@@ -21,6 +22,7 @@ typedef enum
   TRAFFIC_LIGHT_STATE_RED_YELLOW
 } traffic_light_state_t;
 
+static const char *TAG = "traffic_light";
 static gptimer_handle_t s_state_timer;
 static gptimer_handle_t s_blink_timer;
 
@@ -28,6 +30,40 @@ static volatile bool s_state_timer_alarm_pending;
 static volatile bool s_blink_timer_alarm_pending;
 static traffic_light_state_t s_current_state = TRAFFIC_LIGHT_STATE_GREEN;
 static traffic_light_mode_t s_current_mode = TRAFFIC_LIGHT_MODE_OFF;
+
+static const char *state_name(traffic_light_state_t state)
+{
+  switch (state)
+  {
+  case TRAFFIC_LIGHT_STATE_GREEN:
+    return "GREEN";
+  case TRAFFIC_LIGHT_STATE_GREEN_BLINKING:
+    return "GREEN_BLINKING";
+  case TRAFFIC_LIGHT_STATE_YELLOW:
+    return "YELLOW";
+  case TRAFFIC_LIGHT_STATE_RED:
+    return "RED";
+  case TRAFFIC_LIGHT_STATE_RED_YELLOW:
+    return "RED_YELLOW";
+  }
+
+  return "UNKNOWN";
+}
+
+static const char *mode_name(traffic_light_mode_t mode)
+{
+  switch (mode)
+  {
+  case TRAFFIC_LIGHT_MODE_OFF:
+    return "OFF";
+  case TRAFFIC_LIGHT_MODE_NORMAL:
+    return "NORMAL";
+  case TRAFFIC_LIGHT_MODE_YELLOW_BLINKING:
+    return "YELLOW_BLINKING";
+  }
+
+  return "UNKNOWN";
+}
 
 static bool IRAM_ATTR on_state_timer_alarm(
     gptimer_handle_t timer,
@@ -111,6 +147,7 @@ static void set_lights(bool red_on, bool yellow_on, bool green_on)
 static void enter_state(traffic_light_state_t new_state)
 {
   s_current_state = new_state;
+  ESP_LOGI(TAG, "State: %s", state_name(s_current_state));
 
   switch (s_current_state)
   {
@@ -248,20 +285,33 @@ void traffic_light_init(void)
   setup_state_timer();
   setup_blink_timer();
   setup_leds();
+
+  ESP_LOGI(
+      TAG,
+      "Initialized (red GPIO=%d, yellow GPIO=%d, green GPIO=%d)",
+      (int)TRAFFIC_LIGHT_RED_LED_GPIO,
+      (int)TRAFFIC_LIGHT_YELLOW_LED_GPIO,
+      (int)TRAFFIC_LIGHT_GREEN_LED_GPIO);
 }
 
 void traffic_light_set_mode(traffic_light_mode_t new_mode)
 {
   if (new_mode == s_current_mode)
   {
+    ESP_LOGD(TAG, "Mode is already %s", mode_name(new_mode));
     return;
   }
 
   stop_state_timer();
   stop_blink_timer();
 
-  s_current_mode = new_mode;
+  ESP_LOGI(
+      TAG,
+      "Mode: %s -> %s",
+      mode_name(s_current_mode),
+      mode_name(new_mode));
 
+  s_current_mode = new_mode;
   switch (s_current_mode)
   {
   case TRAFFIC_LIGHT_MODE_NORMAL:
